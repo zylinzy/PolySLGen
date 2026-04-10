@@ -68,5 +68,4 @@ pretrained_model_dir = './pretrained_model/' # path to the pre-trained model fol
 ## Acknowledgements
 This implementation builds upon [OneLLM](https://github.com/csuhan/OneLLM).
 
-## Citation
 
