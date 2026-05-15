@@ -47,11 +47,8 @@ class PolySLGen(nn.Module):
             # ========================
             # Adapters for each modality
             # ========================
-            # body: B, T=64, 3, J=69 --> B, 3, 69, T=32 --> 
-            # audio: B, T', 8 --> B, 1, 8, T' --> 
             
             if modal == 'body':
-                # B, ..., 327 --> B, ..., 1024 --> B, ..., llm_hidden_size
                 self.input_emb[modal] =  nn.Linear(self.pose_dim, resample_dim)
                 self.proj1[modal] = nn.Sequential(
                             nn.Linear(resample_dim, resample_dim),
@@ -66,7 +63,6 @@ class PolySLGen(nn.Module):
                 
                 from utils.attention import SpatialTransformer, ResBlock
                 
-                # B, ..., 327 --> B, ..., 512 
                 self.input_emb[modal] = nn.Sequential(
                                 nn.Conv1d(self.pose_dim, resample_dim//2, kernel_size=1, stride=1, padding=0),
                                 ResBlock(channels=resample_dim//2, 
@@ -76,7 +72,6 @@ class PolySLGen(nn.Module):
                                             dims=1,
                                                 ))
                 
-                # B, ..., 327  --> B, ..., 512
                 self.context_emb = nn.Sequential(
                                 nn.Linear(self.pose_dim, resample_dim//2),
                                 nn.GELU(),
@@ -91,7 +86,6 @@ class PolySLGen(nn.Module):
                                                             depth = 1, 
                                                             context_dim = resample_dim//2)
                 
-                # B, ..., 512 --> B, ..., llm_hidden_size
                 self.proj2[modal] = nn.Sequential(
                             nn.Linear(resample_dim//2, llm_hidden_size),
                             nn.LayerNorm(llm_hidden_size),
@@ -101,23 +95,19 @@ class PolySLGen(nn.Module):
             
                 dim_emb = 16
                 
-                # B, ..., 1 --> B, ..., 16
                 self.interact_emb = nn.Linear(1, dim_emb)
-                  
-                # B, 64, ... --> B, 2, ...
+                
                 self.input_emb[modal] = nn.Sequential(
                             nn.Conv2d(args.pose_hist_length, args.social_cue_length, kernel_size=3, padding=1),
                             nn.GroupNorm(1, args.social_cue_length),
                             )
                 
-                # B, ..., 4*32 --> B, ..., 1024
                 self.proj1[modal] = nn.Sequential(
                             nn.Linear(4 * dim_emb, resample_dim),
                             nn.LayerNorm(resample_dim),
                             nn.Linear(resample_dim, resample_dim),
                             )
                 
-                # B, ..., 1024 --> B, ..., llm_hidden_size
                 self.proj2[modal] = nn.Sequential(
                         nn.Linear(resample_dim, llm_hidden_size),
                         nn.LayerNorm(llm_hidden_size),
@@ -126,24 +116,20 @@ class PolySLGen(nn.Module):
                                       
             elif modal == 'audio':
                 
-                # B, ..., 256 --> B, ..., 1024
                 self.input_emb[modal] = nn.Sequential(
                         nn.Linear(args.style_dim, resample_dim),
                         nn.LayerNorm(resample_dim))
-                   
-                # B, ..., 1024 --> B, ..., 1024
+                
                 self.proj1[modal] = nn.Sequential(
                     nn.Linear(resample_dim, resample_dim),
                     nn.LayerNorm(resample_dim))
-                    
-                # B, ..., 1024 --> B, ..., llm_hidden_size
+                
                 self.proj2[modal] = nn.Sequential(
                             nn.Linear(resample_dim, llm_hidden_size),
                             nn.LayerNorm(llm_hidden_size))
             
             
             #### predict speaking-state score
-            # B, 3072 --> B, 1
             self.pred_state = nn.Sequential(
                         nn.Linear(llm_hidden_size, resample_dim//2),
                         nn.ReLU(inplace=True),
@@ -182,7 +168,6 @@ class PolySLGen(nn.Module):
          
         elif modal in ['body_fusion']:
             
-            #B = x.shape[0]
             D = x.shape[-1]
             T = self.args.pose_hist_length
             x_in = x[:, -T:].reshape(-1, D, 1)
@@ -325,7 +310,7 @@ class PolySLGen(nn.Module):
         # -------------
         # outputs_all.loss = scalar
         # outputs_all.logits = (B, max_words, 128256)
-        # outputs_all.hidden_states (tuples) (B, max_words, 4096)
+        # outputs_all.hidden_states (tuples) (B, max_words, llm_hidden_size)
         ce_loss = outputs_all.loss
         out_logits = outputs_all.logits
         output_hidden_states = outputs_all.hidden_states[-1]
@@ -400,9 +385,7 @@ class PolySLGen(nn.Module):
         # -------------
         # Text embeddings
         # -------------
-        # B, 8192, 4096
         input_embeddings = self.llama.get_input_embeddings()(input_tokens_pad)
-        #B, _, _ = input_embeddings.shape
         
         # -------------
         # Encode/insert audio embeddings
@@ -445,7 +428,7 @@ class PolySLGen(nn.Module):
         else:
             if len(obs_batch_pose_data) != 0:
                 # B5T, 327
-                obs_batch_pose_data = torch.cat(obs_batch_pose_data, dim=0) # B, (5 * (T, L) )
+                obs_batch_pose_data = torch.cat(obs_batch_pose_data, dim=0)
                 obs_pose_ids = torch.where((input_tokens_pad == self.tokenizer.pose_token_id) & (target_mask_pad != 1))
                 obs_pose_embeddings = self.encode_modality(obs_batch_pose_data, modal='body')
                 input_embeddings[obs_pose_ids] = obs_pose_embeddings.to(dtype=input_embeddings.dtype)
@@ -554,7 +537,7 @@ class PolySLGenWrapper(nn.Module):
         
         #### pose ####   
         if len(output['gt_pose']) != 0:
-            # here we only calculate representation l2 loss
+            # representation l2 loss
             gt_norm = (output['gt_pose'] - self.pose_mean) / self.pose_std
             loss_body = ((output['pred_pose'] - gt_norm) ** 2).sum(-1).mean()
             # recontruct body pose
@@ -743,13 +726,13 @@ class PolySLGenWrapper(nn.Module):
             #### audio (style) ####
             if len(audio_b_ids) != 0:
                 
-                # next_embeddings: B, 4096, next_audio: B, 256
+                # next_embeddings: B, llm_hidden_size, next_audio: B, 256
                 next_audio = self.polyslgen.decode_modality(next_embeddings[audio_b_ids], modal='audio')
                 
                 # collect output
                 audio_embeddings_out[audio_b_ids, cur_audio_length[audio_b_ids]] = next_audio
                 
-                # next_audio: B, 256 --> audio_embeddings: B, 4096
+                # next_audio: B, 256 --> audio_embeddings: B, llm_hidden_size
                 audio_embeddings = self.polyslgen.encode_modality(next_audio, modal='audio')
                 input_embeddings_pad[audio_b_ids, cur_pos] = audio_embeddings.to(dtype=input_embeddings_pad.dtype)
                 input_tokens_pad[audio_b_ids, cur_pos] = self.polyslgen.tokenizer.audio_token_id
@@ -762,7 +745,7 @@ class PolySLGenWrapper(nn.Module):
             #### pose ####
             if len(pose_b_ids) != 0:
                 
-                # next_embeddings: B, 4096, next_pose: B, 327
+                # next_embeddings: B, llm_hidden_size, next_pose: B, 327
                 next_pose = self.polyslgen.decode_modality(next_embeddings[pose_b_ids], modal='body')
             
                 next_pose_unnorm = next_pose * self.pose_std + self.pose_mean
@@ -772,7 +755,7 @@ class PolySLGenWrapper(nn.Module):
                 next_wholebody_pose = self.body_skeleton.forward(next_pose_unnorm)
                 wholebody_pose_out[pose_b_ids, cur_pose_length[pose_b_ids]] = next_wholebody_pose
                 
-                # pred_pose: B, 327 --> pose_embeddings: B, 4096
+                # pred_pose: B, 327 --> pose_embeddings: B, llm_hidden_size
                 pose_embeddings = self.polyslgen.encode_modality(next_pose.flatten(start_dim=1), modal='body')
                 input_embeddings_pad[pose_b_ids, cur_pos] = pose_embeddings.to(dtype=input_embeddings_pad.dtype)
                 input_tokens_pad[pose_b_ids, cur_pos] = self.polyslgen.tokenizer.pose_token_id
@@ -899,7 +882,6 @@ class PolySLGenWrapper(nn.Module):
         
         # ============================================================ 
         # collect gt
-        # have to do this for each sample since they are in different sizes
         if labels is not None:
             #### text ####
             gt_text_tokens_out = []

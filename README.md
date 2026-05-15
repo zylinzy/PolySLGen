@@ -1,4 +1,5 @@
 # PolySLGen: Online Multimodal Speaking–Listening Reaction Generation in Polyadic Interaction
+[![arXiv](https://img.shields.io/badge/arXiv-2501.12345-b31b1b.svg)](https://arxiv.org/abs/2604.08125)
 
 ## Getting Started 
 
@@ -68,4 +69,13 @@ pretrained_model_dir = './pretrained_model/' # path to the pre-trained model fol
 ## Acknowledgements
 This implementation builds upon [OneLLM](https://github.com/csuhan/OneLLM).
 
+## Citation
+```bibtex
+@article{lin2026polyslgen,
+  title={PolySLGen: Online Multimodal Speaking-Listening Reaction Generation in Polyadic Interaction},
+  author={Lin, Zhi-Yi and Markhorst, Thomas and Chew, Jouh Yeong and Zhang, Xucong},
+  journal={arXiv preprint arXiv:2604.08125},
+  year={2026}
+}
+```
 

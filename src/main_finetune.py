@@ -309,8 +309,8 @@ def main(args):
         
         train_logger.info(f"Start training for {args.epochs} epochs")
         
-        extra_epoch = start_iter // len(data_loader_train) # only got 1 if it is the last iter, otherwise should be 0
-        start_iter = start_iter % len(data_loader_train) # only got 0 if it is the last iter, otherwise  should be start_iter
+        extra_epoch = start_iter // len(data_loader_train)
+        start_iter = start_iter % len(data_loader_train)
         start_epoch = start_epoch + extra_epoch
         
         start_time = time.time()
@@ -329,7 +329,7 @@ def main(args):
             train_log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch}
             
-            # validation every epoch
+            # validation
             if (epoch % args.val_interval == 0) or (epoch + 1 == args.epochs):
                 val_stats = validation(
                     model, data_loader_val,
@@ -339,7 +339,6 @@ def main(args):
                     mode='val',
                     train_logger=train_logger
                 )
-                # for validation, we add the results to the training log stats
                 val_log_stats = {**{f'val_{k}': v for k, v in val_stats.items()},
                         'epoch': epoch}
                     
